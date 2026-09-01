@@ -24,9 +24,12 @@ from pathlib import Path
 
 import io
 
+import ssl
+
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
+from requests.adapters import HTTPAdapter
 
 import config
 
@@ -38,6 +41,32 @@ HEADERS = {
     )
 }
 TIMEOUT = 15
+
+
+class LegacySSLAdapter(HTTPAdapter):
+    """
+    일부 오래된 정부/공공기관 서버는 최신 requests/OpenSSL 기본 설정과
+    TLS 핸드셰이크가 맞지 않아 SSLEOFError 등으로 접속이 끊기는 경우가 있다.
+    이 어댑터는 그런 서버를 위해 보안 레벨을 낮추고 레거시 재협상을 허용한다.
+    """
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+        # OP_LEGACY_SERVER_CONNECT 는 파이썬/OpenSSL 버전에 따라 없을 수 있음
+        legacy_flag = getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+        ctx.options |= legacy_flag
+        kwargs["ssl_context"] = ctx
+        return super().init_poolmanager(*args, **kwargs)
+
+
+def _make_session() -> requests.Session:
+    session = requests.Session()
+    session.mount("https://", LegacySSLAdapter())
+    return session
+
+
+SESSION = _make_session()
 
 
 # ────────────────────────────────────────────────────────────
@@ -62,12 +91,22 @@ def _extract_attachments(tr, base_url: str):
     return attachments
 
 
+CLOSED_STATUS_HINTS = ("채용종료", "마감", "접수종료", "모집종료", "종료됨")
+
+
+def _row_is_closed(tr) -> bool:
+    """행(tr) 안에 '채용종료/마감' 같은 상태 텍스트가 있으면 True"""
+    row_text = tr.get_text(" ", strip=True)
+    return any(hint in row_text for hint in CLOSED_STATUS_HINTS)
+
+
 def parse_generic_table(html: str, base_url: str):
     """
     대부분의 공공기관 게시판(표준프레임워크 selectNttList.do, goBoard.do 계열 등)에
     공통적으로 쓰이는 <table> 기반 목록을 파싱하는 범용 함수.
 
     - <table> 안의 각 <tr> 을 검사
+    - 행에 "채용종료/마감" 같은 상태 표시가 있으면 그 행은 통째로 건너뜀 (마감 공고 제외)
     - 그 안에 있는 <a> 태그 중 텍스트 길이가 6자 이상인 것을 "공고 제목"으로 간주
     - 같은 행(tr) 안에 PDF/HWP 등 첨부파일 링크가 있으면 함께 수집
     - 페이지마다 구조가 조금씩 달라 100% 정확하지는 않으므로, 사이트별로 결과를
@@ -84,6 +123,10 @@ def parse_generic_table(html: str, base_url: str):
         for tr in table.find_all("tr"):
             # 헤더 행(th만 있는 행)은 스킵
             if tr.find("th") and not tr.find("td"):
+                continue
+
+            # 마감/종료된 공고는 통째로 스킵
+            if _row_is_closed(tr):
                 continue
 
             attachments = _extract_attachments(tr, base_url)
@@ -119,7 +162,7 @@ def parse_generic_table(html: str, base_url: str):
 def extract_pdf_text(url: str, max_pages: int = 5) -> str:
     """PDF 첨부파일을 다운로드해서 텍스트를 추출. 실패하면 빈 문자열 반환."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        resp = SESSION.get(url, headers=HEADERS, timeout=TIMEOUT)
         resp.raise_for_status()
         reader = PdfReader(io.BytesIO(resp.content))
         text_parts = []
@@ -144,7 +187,11 @@ def find_keyword_snippet(text: str, keywords, context: int = 60) -> str:
 
 
 def fetch(url: str) -> str:
-    resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+    try:
+        resp = SESSION.get(url, headers=HEADERS, timeout=TIMEOUT)
+    except requests.exceptions.SSLError:
+        # 레거시 어댑터로도 안 되면 기본 세션으로 한 번 더 시도
+        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     resp.raise_for_status()
     resp.encoding = resp.apparent_encoding or resp.encoding
     return resp.text
