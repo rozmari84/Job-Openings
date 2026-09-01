@@ -229,7 +229,7 @@ def search_saramin():
     results = []
     base = "https://www.saramin.co.kr/zf_user/search/recruit"
     for region in config.SARAMIN_REGIONS:
-        for kw in config.KEYWORDS:
+        for kw in config.SARAMIN_KEYWORDS:
             query = f"{region} {kw}"
             params = {"searchword": query}
             try:
