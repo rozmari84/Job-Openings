@@ -159,6 +159,19 @@ def parse_generic_table(html: str, base_url: str):
     return results
 
 
+def parse_costco(html: str, base_url: str):
+    """
+    코스트코코리아 채용 게시판(recruiter.co.kr 플랫폼).
+    전국 매장 공고가 섞여 있으므로, 제목에 지역명("대구")이 들어간 것만 추려낸다.
+
+    주의: 이 사이트는 /app/... 경로의 SPA(자바스크립트 렌더링) 구조일 가능성이 있다.
+    만약 결과가 계속 0건으로 나온다면, requests로는 목록이 안 보이는(JS로 그려지는)
+    페이지일 확률이 높으니 알려주면 API 방식으로 다시 만들어야 한다.
+    """
+    postings = parse_generic_table(html, base_url)
+    return [p for p in postings if "대구" in p["title"]]
+
+
 def extract_pdf_text(url: str, max_pages: int = 5) -> str:
     """PDF 첨부파일을 다운로드해서 텍스트를 추출. 실패하면 빈 문자열 반환."""
     try:
@@ -307,9 +320,10 @@ def main():
     new_titles = set()
     new_postings_msg = []
 
-    # 1) 공공기관
+    # 1) 공공기관 + config.SITES에 등록된 민간기업(코스트코 등)
     public_results = crawl_public_sites()
     for org_name, data in public_results.items():
+        category_label = data["category"]
         for p in data["postings"]:
             key = f"{org_name}::{p['title']}"
             new_titles.add(key)
@@ -332,8 +346,13 @@ def main():
                     # HWP는 텍스트 추출 미지원 - 첨부파일이 있다는 것만 알림에 표시
                     pdf_note = " (⚠️ HWP 첨부파일 있음 - 직접 확인 필요)"
 
+            # 코스트코처럼 지역 필터만으로 이미 걸러진 민간기업 항목은
+            # 키워드가 제목에 없어도(예: "대구점 신입사원 채용") 그대로 알림 대상으로 둠
+            if category_label == "민간기업":
+                hit = True
+
             if hit:
-                msg = f"[공공기관 | {org_name}] {p['title']}{pdf_note}\n{p['link']}"
+                msg = f"[{category_label} | {org_name}] {p['title']}{pdf_note}\n{p['link']}"
                 if snippet:
                     msg += f"\n📎 첨부파일 내용: {snippet}"
                 new_postings_msg.append(msg)

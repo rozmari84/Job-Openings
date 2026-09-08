@@ -65,16 +65,30 @@ SITES = [
         "url": "https://www.reb.or.kr/recruit/na/ntt/selectNttList.do?mi=9916&bbsId=1251",
         "parser": "parse_generic_table",
     },
+    {
+        "name": "대구경북첨단의료산업진흥재단(K-MEDIhub)",
+        "category": "공공기관",
+        "url": "https://www.kmedihub.re.kr/index.do?menu_id=00000065&servletPath=%2Findex.do",
+        "parser": "parse_generic_table",
+    },
     # 아래는 대구신서혁신도시 소재로 추정되나 채용페이지 URL을 아직 확인 못한 기관입니다.
     # 실제 URL을 찾아서 채워 넣거나, 확인되면 알려주시면 추가해 드릴게요.
     # - 한국사학진흥재단
     # - 한국산업기술기획평가원
     # - 한국로봇산업진흥원 (북구)
-    # - 대구경북첨단의료산업진흥재단
     # - 한국물기술인증원 (달성군)
 
     # ── 민간기업 (대구/영천/경산) ────────────────────────────
-    # 사기업은 채용 페이지가 자주 바뀌거나 별도 채용 사이트(사람인/잡코리아)만 쓰는 경우가
+    # ── 민간기업 (개별 채용페이지) ──────────────────────────
+    {
+        "name": "코스트코코리아",
+        "category": "민간기업",
+        "region": "대구",
+        "url": "https://costco.recruiter.co.kr/app/jobnotice/list",
+        "parser": "parse_costco",
+    },
+
+    # 사람인은 채용 페이지가 자주 바뀌거나 별도 채용 사이트(사람인/잡코리아)만 쓰는 경우가
     # 많아서, 개별 URL을 고정 관리하기보다 사람인 지역+키워드 검색 결과를 크롤링하는 방식을
     # 추천합니다. main.py 의 search_saramin() 함수가 이 역할을 합니다.
 ]
