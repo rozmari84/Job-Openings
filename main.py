@@ -21,6 +21,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 import io
 
@@ -233,6 +234,20 @@ def crawl_public_sites():
 # ────────────────────────────────────────────────────────────
 # 민간기업 (사람인 지역+키워드 검색)
 # ────────────────────────────────────────────────────────────
+def make_permanent_saramin_link(raw_href: str) -> str:
+    """
+    사람인 검색결과의 링크(예: .../relay/view?...&search_uuid=...)는
+    검색 세션에 묶인 임시 링크라 며칠 지나면 만료되어 클릭해도 넘어가지 않는다.
+    rec_idx(공고 고유번호)만 남긴 영구 링크로 바꿔서 저장/알림에 사용한다.
+    """
+    full_url = requests.compat.urljoin("https://www.saramin.co.kr", raw_href)
+    query = parse_qs(urlparse(full_url).query)
+    rec_idx = query.get("rec_idx", [None])[0]
+    if rec_idx:
+        return f"https://www.saramin.co.kr/zf_user/jobs/relay/view?rec_idx={rec_idx}"
+    return full_url  # rec_idx를 못 찾으면 원래 링크라도 사용
+
+
 def search_saramin():
     """
     사람인 검색 결과 페이지를 지역+키워드 조합으로 크롤링.
@@ -257,9 +272,7 @@ def search_saramin():
                     if not title_tag:
                         continue
                     title = title_tag.get_text(strip=True)
-                    link = requests.compat.urljoin(
-                        "https://www.saramin.co.kr", title_tag.get("href", "")
-                    )
+                    link = make_permanent_saramin_link(title_tag.get("href", ""))
                     company_tag = item.select_one(".corp_name a")
                     company = (
                         company_tag.get_text(strip=True) if company_tag else "?"
