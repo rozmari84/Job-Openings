@@ -33,7 +33,7 @@ SITES = [
         "name": "한국지능정보사회진흥원(NIA)",
         "category": "공공기관",
         "url": "https://www.nia.or.kr/site/nia_kor/ex/bbs/List.do?cbIdx=60362",
-        "parser": "parse_generic_table",
+        "parser": "parse_nia",
     },
     {
         "name": "한국산업단지공단(KICOX)",

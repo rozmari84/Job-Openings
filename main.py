@@ -173,6 +173,44 @@ def parse_costco(html: str, base_url: str):
     return [p for p in postings if "대구" in p["title"]]
 
 
+DATE_PATTERN = re.compile(r"\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}")
+
+
+def parse_nia(html: str, base_url: str):
+    """
+    한국지능정보사회진흥원(NIA) 채용안내 게시판 전용 파서.
+
+    이 사이트는 다른 공공기관들과 달리 <table> 형태가 아니라, 각 공고가
+    href="#view" 인 <a> 태그 하나에 "제목 + 날짜 + 조회수 + 담당자" 가
+    통째로 들어있는 목록(리스트) 형태라 parse_generic_table 로는 하나도
+    못 찾는다. 날짜 패턴(YYYY.MM.DD) 바로 앞까지를 제목으로 잘라낸다.
+
+    이 사이트는 첨부파일을 상세페이지에서 AJAX로 불러오는 방식이라, 목록
+    단계에서는 첨부파일(PDF) 링크를 얻을 수 없다 (attachments 항상 빈 리스트).
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    seen_titles = set()
+
+    for a in soup.find_all("a", href="#view"):
+        raw_text = a.get_text(" ", strip=True)
+        if not raw_text:
+            continue
+
+        m = DATE_PATTERN.search(raw_text)
+        title = raw_text[: m.start()] if m else raw_text
+        title = title.replace("첨부파일 있음", "").replace("첨부파일 없음", "")
+        title = title.strip(" *\u3000")
+
+        if len(title) < 6 or title in seen_titles:
+            continue
+
+        seen_titles.add(title)
+        results.append({"title": title, "link": base_url, "attachments": []})
+
+    return results
+
+
 def extract_pdf_text(url: str, max_pages: int = 5) -> str:
     """PDF 첨부파일을 다운로드해서 텍스트를 추출. 실패하면 빈 문자열 반환."""
     try:
